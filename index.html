@@ -1,138 +1,160 @@
-
 <html>
 
-    <style>
-        input {
-            width: 100%;
-            margin-bottom: 0.5rem;
+<style>
+    input {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+
+    input,
+    button {
+        font-size: 140%;
+    }
+</style>
+
+<body>
+    <form id="search">
+        <input type="text" placeholder="Sample number XXXX-YYY" id="number">
+        <button>
+            Look up
+        </button>
+    </form>
+    <div id="action"></div>
+    <p id="status"></p>
+</body>
+
+</html>
+
+<script>
+    (function () {
+        init();
+    })();
+
+    /** 
+    * This is the function that runs when you click Search 
+    */
+    function search(event) {
+        event.preventDefault();
+
+        var number = document.getElementById('number').value;
+
+        if (!number || number.length < 7) {
+            alert('Please enter a sample number in XXXX-YYY format.');
+            return;
         }
-    
-        input,
-        button {
-            font-size: 140%;
+
+        const data = [{
+            f: 215,
+            m: '=',
+            v: number
+        }]
+
+        const url = 'https://www.anecdata.org/explore/';
+
+        const base64 = makeBase64(data);
+
+        try {
+            checkData(data);
+        } catch (e) {
+            console.error(e);
+            window.open(url + '?project_id=299&advanced_search=' + base64, '_blank');
         }
-    </style>
-    
-    <body>
-        <form id="search">
-            <input type="text" placeholder="Sample number XXXX-YYY" id="number">
-            <button>
-                Look up
-            </button>
-        </form>
-        <div id="actions"></div>
-        <p id="status"></p>
-    </body>
-    
-    </html>
-    
-    <script>
-        (function () {
-            init();
-        })();
-    
-    
-    
-        function search(event) {
-            event.preventDefault();
-    
-            var number = document.getElementById('number').value;
-    
-            if (!number || number.length < 7) {
-                alert('Please enter a sample number in XXXX-YYY format.');
-                return;
+    };
+
+
+    /**
+    Clear the action button 
+    */
+    function clearAction() {
+        document.getElementById('action').innerHTML = '';
+    }
+
+    function isRegistered(id) {
+        clearAction();
+        var url = 'https://www.anecdata.org/posts/view/' + id;
+        var el = document.getElementById('action');
+        el.innerHTML += '<p>We have your sample registration on file, but the results have not come back from the lab yet. Samples can take 6-8 weeks to process. We will post an project forum announcement when there are new results! If you have created an account on Anecdata.org and have joined the All About Arsenic project, you will get an automatic e-mail notification at that time.</p>';
+        el.innerHTML += '<p><a href="' + url + '" target="_blank">View your registration now</a></p>';
+    }
+
+    function hasResults(id) {
+        clearAction();
+        var url = 'https://www.anecdata.org/posts/view/' + id;
+        var el = document.getElementById('action');
+        el.innerHTML += '<p>Your results are in!</p>';
+        el.innerHTML += '<p><a href="' + url + '" target="_blank">View your results now</a></p>';
+    }
+
+    function notRegistered() {
+        clearAction();
+        const el = document.getElementById('action');
+        el.innerHTML += '<p>It looks like you don\'t have a sample registered yet. Make sure you typed in your full sample number, i.e. 2020-999</p>';
+        el.innerHTML += '<p><a href="https://www.anecdata.org/projects/view/299" target="_blank">Visit the project and register a sample now</a></p>';
+    }
+
+    function init() {
+        document.getElementById('search').onsubmit = search;
+    }
+
+    function makeBase64(params) {
+        return btoa(JSON.stringify(params)).replace(/=/g, '-').replace(/\+/g, '_');;
+    }
+
+    async function checkData(params) {
+        clearAction();
+
+        var registrations;
+        try {
+            registrations = await getData(params);
+            if (!registrations.posts || !registrations.posts.length) {
+                throw new Error('Not registered');
             }
-    
-            const data = [{
-                f: 215,
-                m: '=',
-                v: number
-            }]
-    
-            const url = 'https://www.anecdata.org/explore/';
-    
-            const base64 = makeBase64(data);
-    
-            try {
-                checkData(data);
-            } catch (e) {
-                console.error(e);
-                window.open(url + '?project_id=299&advanced_search=' + base64, '_blank');
-            }
-        };
-    
-        function init() {
-            document.getElementById('search').onsubmit = search;
+        } catch (e) {
+            notRegistered();
+            return;
         }
-    
-        function makeBase64(params) {
-            return btoa(JSON.stringify(params)).replace(/=/g, '-').replace(/\+/g, '_');;
+
+        // Select for registrations with As 0 or above
+        const params2 = JSON.parse(JSON.stringify(params));
+        params2.push({
+            f: 22,
+            m: '>',
+            v: -1
+        });
+
+        const labResults = await getData(params2);
+
+        if (labResults.posts && labResults.posts.length) {
+            hasResults(labResults.posts[0].Post.id);
+        } else {
+            isRegistered(registrations.posts[0].Post.id);
         }
-    
-        async function checkData(params) {
-            const hasRegistered = await hasData(params);
-            if (hasRegistered) {
-                // We at least have an observation
-            } else {
-                // We don't have a matching registration
-                const ok = confirm(
-                    'We could not find a sample matching this registration. Make sure that you have registered your sample on Anecdata.org using the full sample number (XXXX-XXX) from your sample tube. Would you like to go to the Anecdata project page now?'
-                );
-    
-                if (ok) {
-                    window.open('https://www.anecdata.org/projects/view/299', '_blank');
-                }
-    
-                return;
-            }
-    
-            const params2 = JSON.parse(JSON.stringify(params));
-            params2.push({
-                f: 22,
-                m: '>',
-                v: -1
-            });
-    
-            const hasLabResults = await hasData(params2);
-            if (hasLabResults) {
-                // We at have an observation with data uploaded!
-                alert('Your results are in!');
-            } else {
-                // We don't have results yet.
-                alert(
-                    'We have your sample registration on file, but the results have not come back from the lab yet. Samples can take 6-8 weeks to process. We will post an project forum announcement when there are new results! If you have created an account on Anecdata.org and have joined the All About Arsenic project, you will get an automatic e-mail notification at that time. We will now open a new window with your sample registration!'
-                );
-            }
-            const url = 'https://www.anecdata.org/posts/view/';
-            const data = await getData(params);
-            console.log(data);
-            window.open(url +  data.posts[0].Post.id, '_blank');
-        }
-    
-        async function hasData(params) {
-            const json = await getData(params);
-            return json && json.posts && json.posts.length > 0;
-        }
-    
-        async function getData(params) {
-    
-            console.log(JSON.parse(JSON.stringify(params)));
-            const url = 'https://www.anecdata.org/rest_posts.json?advanced_search=' + makeBase64(params);
-            console.log(url);
-            console.log(new Error().stack);
-            // Default options are marked with *
-            const response = await fetch(url, {
-                method: 'GET', // *GET, POST, PUT, DELETE, etc.
-                // mode: 'cors', // no-cors, *cors, same-origin
-                cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
-                // credentials: 'same-origin', // include, *same-origin, omit
-                headers: {
-                    'Content-Type': 'application/json'
-                    // 'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                redirect: 'follow', // manual, *follow, error
-            });
-            const json = await response.json(); // parses JSON response into native JavaScript objects
-            return json;
-        }
-    </script>
+
+    }
+
+    async function hasData(params) {
+        const json = await getData(params);
+        return json && json.posts && json.posts.length > 0;
+    }
+
+    async function getData(params) {
+
+        console.log(JSON.parse(JSON.stringify(params)));
+        const url = 'https://www.anecdata.org/rest_posts.json?advanced_search=' + makeBase64(params);
+
+        // Default options are marked with *
+        const response = await fetch(url, {
+            method: 'GET', // *GET, POST, PUT, DELETE, etc.
+            // mode: 'cors', // no-cors, *cors, same-origin
+            cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
+            // credentials: 'same-origin', // include, *same-origin, omit
+            headers: {
+                'Content-Type': 'application/json'
+                // 'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            redirect: 'follow', // manual, *follow, error
+        });
+        const json = await response.json(); // parses JSON response into native JavaScript objects
+        return json;
+    }
+</script>
