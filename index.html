@@ -1,0 +1,138 @@
+
+<html>
+
+    <style>
+        input {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+    
+        input,
+        button {
+            font-size: 140%;
+        }
+    </style>
+    
+    <body>
+        <form id="search">
+            <input type="text" placeholder="Sample number XXXX-YYY" id="number">
+            <button>
+                Look up
+            </button>
+        </form>
+        <div id="actions"></div>
+        <p id="status"></p>
+    </body>
+    
+    </html>
+    
+    <script>
+        (function () {
+            init();
+        })();
+    
+    
+    
+        function search(event) {
+            event.preventDefault();
+    
+            var number = document.getElementById('number').value;
+    
+            if (!number || number.length < 7) {
+                alert('Please enter a sample number in XXXX-YYY format.');
+                return;
+            }
+    
+            const data = [{
+                f: 215,
+                m: '=',
+                v: number
+            }]
+    
+            const url = 'https://www.anecdata.org/explore/';
+    
+            const base64 = makeBase64(data);
+    
+            try {
+                checkData(data);
+            } catch (e) {
+                console.error(e);
+                window.open(url + '?project_id=299&advanced_search=' + base64, '_blank');
+            }
+        };
+    
+        function init() {
+            document.getElementById('search').onsubmit = search;
+        }
+    
+        function makeBase64(params) {
+            return btoa(JSON.stringify(params)).replace(/=/g, '-').replace(/\+/g, '_');;
+        }
+    
+        async function checkData(params) {
+            const hasRegistered = await hasData(params);
+            if (hasRegistered) {
+                // We at least have an observation
+            } else {
+                // We don't have a matching registration
+                const ok = confirm(
+                    'We could not find a sample matching this registration. Make sure that you have registered your sample on Anecdata.org using the full sample number (XXXX-XXX) from your sample tube. Would you like to go to the Anecdata project page now?'
+                );
+    
+                if (ok) {
+                    window.open('https://www.anecdata.org/projects/view/299', '_blank');
+                }
+    
+                return;
+            }
+    
+            const params2 = JSON.parse(JSON.stringify(params));
+            params2.push({
+                f: 22,
+                m: '>',
+                v: -1
+            });
+    
+            const hasLabResults = await hasData(params2);
+            if (hasLabResults) {
+                // We at have an observation with data uploaded!
+                alert('Your results are in!');
+            } else {
+                // We don't have results yet.
+                alert(
+                    'We have your sample registration on file, but the results have not come back from the lab yet. Samples can take 6-8 weeks to process. We will post an project forum announcement when there are new results! If you have created an account on Anecdata.org and have joined the All About Arsenic project, you will get an automatic e-mail notification at that time. We will now open a new window with your sample registration!'
+                );
+            }
+            const url = 'https://www.anecdata.org/posts/view/';
+            const data = await getData(params);
+            console.log(data);
+            window.open(url +  data.posts[0].Post.id, '_blank');
+        }
+    
+        async function hasData(params) {
+            const json = await getData(params);
+            return json && json.posts && json.posts.length > 0;
+        }
+    
+        async function getData(params) {
+    
+            console.log(JSON.parse(JSON.stringify(params)));
+            const url = 'https://www.anecdata.org/rest_posts.json?advanced_search=' + makeBase64(params);
+            console.log(url);
+            console.log(new Error().stack);
+            // Default options are marked with *
+            const response = await fetch(url, {
+                method: 'GET', // *GET, POST, PUT, DELETE, etc.
+                // mode: 'cors', // no-cors, *cors, same-origin
+                cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
+                // credentials: 'same-origin', // include, *same-origin, omit
+                headers: {
+                    'Content-Type': 'application/json'
+                    // 'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                redirect: 'follow', // manual, *follow, error
+            });
+            const json = await response.json(); // parses JSON response into native JavaScript objects
+            return json;
+        }
+    </script>
